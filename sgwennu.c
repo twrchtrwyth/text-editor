@@ -21,6 +21,9 @@ struct termios orig_termios;
 /*** terminal ***/
 
 void die(const char *s) {
+  write(STDOUT_FILENO, "\x1b[2J", 4);
+  write(STDOUT_FILENO, "\x1b[H", 3);
+
   perror(s);  // Prints descriptive error message in event of failure.
   exit(1);  // Exits the program with exit status 1 (indicating failure)
 }
@@ -84,6 +87,41 @@ char editorReadKey() { //Waits for keypress then returns it.
   return c;
 }
 
+/*** output ***/
+
+void editorDrawRows() {
+  int y;
+  for (y =0; y < 24; y++) {
+    // Draws tildes in blank lines.
+    write(STDOUT_FILENO, "~\r\n", 3);
+  }
+}
+
+void editorRefreshScreen() {
+  /* The 4 means we are writing 4 bytes to the terminal.
+  The first byte is \x1b which is hex for the escape character,
+  which is 27 in decimal. This followed by a [ is an escape
+  sequence, which instruct the terminal to do various text
+  formatting tasks like colouring text, moving the cursor, and
+  clearing parts of the screen.
+  The J is the Erase in Display command. The 2 is an argument
+  to the escape sequence (note how it precedes the command): it
+  says to clear the entire screen.
+  This program uses Vt100 escape sequences which are widely
+  supported by modern terminal emulators.
+  We could use the ncurses library to support the largest
+  possible number of terminals, as this handles escape
+  sequences on a terminal-by-terminal basis. */
+  write(STDOUT_FILENO, "\x1b[2J", 4);
+  /* Cursor to top left. H = cursor position. No argument means
+  defaults to top-left position of terminal. */
+  write(STDOUT_FILENO, "\x1b[H", 3);
+
+  editorDrawRows();
+
+  write(STDOUT_FILENO, "\x1b[H", 3);
+}
+
 /*** input ***/
 
 void editorProcessKeypress() { //Waits for keypress then handles.
@@ -91,6 +129,8 @@ void editorProcessKeypress() { //Waits for keypress then handles.
 
   switch (c) {
     case CTRL_KEY('q'):
+      write(STDOUT_FILENO, "\x1b[2J", 4);
+      write(STDOUT_FILENO, "\x1b[H", 3);
       exit(0);
       break;
   }
@@ -102,6 +142,7 @@ int main() {
   enableRawMode();
 
   while (1) {
+    editorRefreshScreen();
     editorProcessKeypress();
   }
 

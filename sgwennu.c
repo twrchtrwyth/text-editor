@@ -1,3 +1,5 @@
+/*** includes ***/
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
@@ -5,7 +7,18 @@
 #include <termios.h>
 #include <unistd.h>
 
+/*** defines ***/
+
+/* This is a macro. 0x1f in hexadecimal = 00011111 in binary.
+This sets the upper 3 bits of the character to 0, which is 
+similar to what the Ctrl key does in the terminal. */
+#define CTRL_KEY(k) ((k) & 0x1f)
+
+/*** data ***/
+
 struct termios orig_termios;
+
+/*** terminal ***/
 
 void die(const char *s) {
   perror(s);  // Prints descriptive error message in event of failure.
@@ -61,20 +74,36 @@ void enableRawMode() {	// Turns off echoing in the terminal.
   if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1) die("tcsetattr");
 }
 
+char editorReadKey() { //Waits for keypress then returns it. 
+  int nread;
+  char c;
+  while ((nread = read(STDIN_FILENO, &c, 1)) != 1) {
+    // Ignore EAGAIN for Cygwin compatibility.
+    if (nread == -1 && errno != EAGAIN) die("read");
+  }
+  return c;
+}
+
+/*** input ***/
+
+void editorProcessKeypress() { //Waits for keypress then handles.
+  char c = editorReadKey();
+
+  switch (c) {
+    case CTRL_KEY('q'):
+      exit(0);
+      break;
+  }
+}
+
+/*** init ***/
+
 int main() {
   enableRawMode();
 
   while (1) {
-    char c = '\0';
-    // Ignore EAGAIN for Cygwin compatibility.
-    if (read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN) die("read");
-    if (iscntrl(c)) {
-      printf("%d\r\n", c); // Need carriage return + newline
-    } else {
-      printf("%d ('%c')\r\n", c, c);
-    }
-    if (c == 'q') break;
-}
+    editorProcessKeypress();
+  }
 
   return 0;
 }

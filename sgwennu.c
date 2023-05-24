@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/ioctl.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -16,7 +17,13 @@ similar to what the Ctrl key does in the terminal. */
 
 /*** data ***/
 
-struct termios orig_termios;
+struct editorConfig { //Global struct that contains editor state.
+  int screenrows;
+  int screencols;
+  struct termios orig_termios;
+};
+
+struct editorConfig E;
 
 /*** terminal ***/
 
@@ -31,15 +38,15 @@ void die(const char *s) {
 void disableRawMode() {  // Switch back to normal terminal input.
   /* Note the syntax here to call `die` in event of failure.
   When tcsetattr fails it returns -1. */
-  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1) die("tcsetattr");
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &E.orig_termios) == -1) die("tcsetattr");
 }
 
 void enableRawMode() {	// Turns off echoing in the terminal.
-  if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) die("tcgetattr");
+  if (tcgetattr(STDIN_FILENO, &E.orig_termios) == -1) die("tcgetattr");
   atexit(disableRawMode);  // Switch echoing back on when exit.
 
   // Store original terminal state.
-  struct termios raw = orig_termios;
+  struct termios raw = E.orig_termios;
 
   /*
   ~ is the bitwise NOT operator. This reverses the bits of 
@@ -87,11 +94,26 @@ char editorReadKey() { //Waits for keypress then returns it.
   return c;
 }
 
+int getWindowSize(int *rows, int*cols) {
+  struct winsize ws; // Stores the window dimensions.
+
+  /* ioctl gets terminal size with the TIOCGWINSZ request. This
+  (probably) stands for Terminal Input/Output Control Get WINdow
+  SiZe. */
+  if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0) {
+    return -1; // If fails.
+  } else {
+    *cols = ws.ws_col;
+    *rows = ws.ws_row;
+    return 0;
+  }
+}
+
 /*** output ***/
 
 void editorDrawRows() {
   int y;
-  for (y =0; y < 24; y++) {
+  for (y =0; y < E.screenrows; y++) {
     // Draws tildes in blank lines.
     write(STDOUT_FILENO, "~\r\n", 3);
   }
@@ -138,8 +160,13 @@ void editorProcessKeypress() { //Waits for keypress then handles.
 
 /*** init ***/
 
+void initEditor() {
+if (getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
+}
+
 int main() {
   enableRawMode();
+  initEditor();
 
   while (1) {
     editorRefreshScreen();
